@@ -138,7 +138,7 @@ The system will automatically include the new agent in the research team.
 │   │   ├── critic.py            # Critic/reviewer agent
 │   │   └── writer.py            # Report writer agent
 │   └── tools/
-│       ├── arxiv.py             # arXiv API (direct HTTP)
+│       ├── arxiv.py             # arXiv API (HTTPS)
 │       ├── semantic_scholar.py  # Semantic Scholar API
 │       ├── web_search.py        # Tavily web search
 │       └── pdf.py               # PDF download and text extraction
