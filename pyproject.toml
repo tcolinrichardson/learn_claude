@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "research-agents"
+version = "0.1.0"
+description = "Deep research multi-agent system for academic paper research using AutoGen"
+requires-python = ">=3.11"
+dependencies = [
+    "autogen-agentchat>=0.4",
+    "autogen-ext[anthropic]",
+    "tavily-python",
+    "pymupdf",
+    "httpx",
+    "pyyaml",
+    "pydantic>=2.0",
+    "pydantic-settings",
+    "python-dotenv",
+    "click",
+    "rich",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-mock",
+]
+
+[project.scripts]
+research-agents = "research_agents.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/research_agents"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
