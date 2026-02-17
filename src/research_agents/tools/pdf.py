@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import ipaddress
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 import pymupdf
@@ -14,6 +16,21 @@ def _get_data_dir() -> Path:
     data_dir = Path(os.environ.get("RESEARCH_DATA_DIR", "data"))
     data_dir.mkdir(parents=True, exist_ok=True)
     return data_dir
+
+
+def _validate_url(url: str) -> str | None:
+    """Validate a URL is safe to fetch. Returns an error string or None if valid."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        return f"Error: Only http/https URLs are permitted, got scheme '{parsed.scheme}'"
+    hostname = parsed.hostname or ""
+    try:
+        addr = ipaddress.ip_address(hostname)
+        if addr.is_private or addr.is_loopback or addr.is_link_local:
+            return f"Error: Requests to private/loopback addresses are not permitted"
+    except ValueError:
+        pass  # hostname is a domain name, not a raw IP — allow it
+    return None
 
 
 async def download_pdf(url: str, filename: str = "") -> str:
@@ -27,6 +44,10 @@ async def download_pdf(url: str, filename: str = "") -> str:
         Message indicating success with the local file path,
         or an error message if download failed.
     """
+    url_error = _validate_url(url)
+    if url_error:
+        return url_error
+
     data_dir = _get_data_dir()
 
     if not filename:
@@ -71,15 +92,19 @@ async def parse_pdf(filepath: str, max_pages: int = 0) -> str:
     Returns:
         Extracted text content from the PDF, with page markers.
     """
-    path = Path(filepath)
+    # Always resolve relative to data_dir; reject absolute paths
+    if Path(filepath).is_absolute():
+        return f"Error: Absolute paths are not permitted. Provide a filename relative to the data directory."
 
-    # If not absolute, look in data directory
-    if not path.is_absolute():
-        data_dir = _get_data_dir()
-        path = data_dir / filepath
+    data_dir = _get_data_dir()
+    path = (data_dir / filepath).resolve()
+
+    # Guard against path traversal (e.g. "../../etc/passwd")
+    if not str(path).startswith(str(data_dir.resolve())):
+        return f"Error: Path traversal detected. Access outside the data directory is not permitted."
 
     if not path.exists():
-        return f"Error: PDF file not found: {path}"
+        return f"Error: PDF file not found: {path.name}"
 
     try:
         doc = pymupdf.open(str(path))

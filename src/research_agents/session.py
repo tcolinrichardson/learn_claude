@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+_SESSION_ID_RE = re.compile(r"^[\w\-]+$")
 
 from research_agents.config import AppConfig
 
@@ -28,13 +31,14 @@ class SessionManager:
         Returns:
             Session dict with id, query, depth, timestamps, and empty state.
         """
-        session_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
+        now = datetime.now(timezone.utc)
+        session_id = now.strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
         session: dict[str, Any] = {
             "id": session_id,
             "query": query,
             "depth": depth,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
             "complete": False,
             "notes": {},
             "messages": [],
@@ -52,6 +56,8 @@ class SessionManager:
         Returns:
             Session dict, or None if not found.
         """
+        if not _SESSION_ID_RE.fullmatch(session_id):
+            raise ValueError(f"Invalid session ID format: '{session_id}'")
         path = self.sessions_dir / f"{session_id}.json"
         if not path.exists():
             return None

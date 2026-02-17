@@ -23,8 +23,8 @@ def extract_report(messages: list[dict[str, Any]]) -> str | None:
     for msg in reversed(messages):
         if msg.get("source") == "Writer" and "REPORT COMPLETE" in msg.get("content", ""):
             content = msg["content"]
-            # Remove the REPORT COMPLETE marker
-            content = content.replace("REPORT COMPLETE", "").strip()
+            # Remove the REPORT COMPLETE marker only from the end of the content
+            content = content.rstrip().removesuffix("REPORT COMPLETE").strip()
             return content
     return None
 

@@ -63,8 +63,9 @@ def _build_team(
     Returns:
         Configured SelectorGroupChat ready to run.
     """
-    # Set env vars so tools can access API keys
-    os.environ["TAVILY_API_KEY"] = env.tavily_api_key
+    # Set env vars so tools can access API keys (only if non-empty)
+    if env.tavily_api_key:
+        os.environ["TAVILY_API_KEY"] = env.tavily_api_key
 
     # Create all agents
     planner = create_planner_agent(config, env, depth)
@@ -123,15 +124,19 @@ async def run_research(
 
     team = _build_team(config, env, depth)
 
+    # Build panel dynamically from actual agents in config
+    agent_lines = (
+        f"  Planner ({config.agents.planner.model}) — creates research plan\n"
+        + "".join(
+            f"  {r.name} ({r.model}) — researcher\n"
+            for r in config.agents.researchers
+        )
+        + f"  Critic ({config.agents.critic.model}) — reviews and challenges\n"
+        + f"  Writer ({config.agents.writer.model}) — synthesizes report"
+    )
     console.print(
         Panel(
-            "[bold]Research team assembled:[/bold]\n"
-            "  Planner (Opus) — creates research plan\n"
-            "  Literature Surveyor (Sonnet) — finds papers\n"
-            "  Methodology Analyst (Sonnet) — analyzes methods\n"
-            "  Cross-Domain Connector (Sonnet) — finds related work\n"
-            "  Critic (Sonnet) — reviews and challenges\n"
-            "  Writer (Opus) — synthesizes report\n\n"
+            f"[bold]Research team assembled:[/bold]\n{agent_lines}\n\n"
             "[dim]Type your input when prompted to guide the research.[/dim]\n"
             "[dim]The system will pause for your input between iterations.[/dim]",
             title="Team Ready",
@@ -155,7 +160,7 @@ async def run_research(
 
             # Display the message
             if isinstance(content, str) and content.strip():
-                style = _agent_style(source)
+                style = _agent_style(source, config)
                 console.print(
                     Panel(
                         Markdown(content),
@@ -164,12 +169,12 @@ async def run_research(
                     )
                 )
 
-                # Record in session
+                # Record in session (truncated for storage)
                 session_mgr.add_message(session, source, content)
 
-                # Check for report completion
+                # Check for report completion — use live content, not stored truncated version
                 if source == "Writer" and "REPORT COMPLETE" in content:
-                    report_content = extract_report(session.get("messages", []))
+                    report_content = content.rstrip().removesuffix("REPORT COMPLETE").strip()
                     if report_content:
                         report_path = save_report(
                             report_content,
@@ -192,15 +197,26 @@ async def run_research(
         session_mgr.save_session(session)
 
 
-def _agent_style(source: str) -> str:
-    """Get the Rich border style for an agent's output panel."""
-    styles = {
+def _agent_style(source: str, config: AppConfig) -> str:
+    """Get the Rich border style for an agent's output panel.
+
+    Fixed roles get consistent colours; dynamic researchers cycle through
+    a palette so custom agents defined in config.yaml are also coloured.
+    """
+    fixed = {
         "Planner": "blue",
-        "Literature_Surveyor": "green",
-        "Methodology_Analyst": "cyan",
-        "Cross_Domain_Connector": "magenta",
         "Critic": "yellow",
         "Writer": "bright_white",
         "Human": "bright_green",
     }
-    return styles.get(source, "dim")
+    if source in fixed:
+        return fixed[source]
+
+    # Assign colours to dynamic researchers by position in config
+    palette = ["green", "cyan", "magenta", "red", "dark_orange"]
+    for i, researcher in enumerate(config.agents.researchers):
+        safe_name = researcher.name.replace(" ", "_").replace("-", "_")
+        if source == safe_name:
+            return palette[i % len(palette)]
+
+    return "dim"

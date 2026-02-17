@@ -31,13 +31,16 @@ async def search_web(
             "Set the key in your .env file to enable web search."
         )
 
-    client = AsyncTavilyClient(api_key=api_key)
-    response = await client.search(
-        query=query,
-        max_results=max_results,
-        search_depth="advanced",
-        include_raw_content=False,
-    )
+    try:
+        client = AsyncTavilyClient(api_key=api_key)
+        response = await client.search(
+            query=query,
+            max_results=max_results,
+            search_depth="advanced",
+            include_raw_content=False,
+        )
+    except Exception as e:
+        return f"Error: Web search failed for query '{query}': {e}"
 
     results = response.get("results", [])
     if not results:

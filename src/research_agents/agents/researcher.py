@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from autogen_agentchat.agents import AssistantAgent
 
 from research_agents.config import AppConfig, EnvSettings, ResearcherConfig
@@ -27,7 +29,7 @@ def _create_single_researcher(
     tools = get_tools(researcher_config.tools) if researcher_config.tools else []
 
     # Sanitize the name for AutoGen (alphanumeric + underscores only)
-    safe_name = researcher_config.name.replace(" ", "_").replace("-", "_")
+    safe_name = re.sub(r"[^A-Za-z0-9_]", "_", researcher_config.name.replace(" ", "_"))
 
     return AssistantAgent(
         name=safe_name,

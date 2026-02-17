@@ -42,10 +42,15 @@ async def search_semantic_scholar(
     if fields_of_study:
         params["fieldsOfStudy"] = fields_of_study
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(f"{S2_API_BASE}/paper/search", params=params)
-        resp.raise_for_status()
-        data = resp.json()
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(f"{S2_API_BASE}/paper/search", params=params)
+            resp.raise_for_status()
+            data = resp.json()
+    except httpx.TimeoutException:
+        return f"Error: Semantic Scholar API request timed out for query: '{query}'"
+    except httpx.HTTPError as e:
+        return f"Error: Semantic Scholar API returned an error for query '{query}': {e}"
 
     papers = data.get("data", [])
     if not papers:
@@ -57,7 +62,7 @@ async def search_semantic_scholar(
             a.get("name", "Unknown") for a in (paper.get("authors") or [])[:5]
         )
         if len(paper.get("authors") or []) > 5:
-            authors += f" et al."
+            authors += " et al."
 
         tldr = paper.get("tldr")
         tldr_text = tldr["text"] if tldr else "N/A"
@@ -101,13 +106,18 @@ async def fetch_paper_details(paper_id: str) -> str:
     Returns:
         Formatted string with detailed paper metadata, citations, and references.
     """
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(
-            f"{S2_API_BASE}/paper/{paper_id}",
-            params={"fields": S2_DETAIL_FIELDS},
-        )
-        resp.raise_for_status()
-        paper = resp.json()
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(
+                f"{S2_API_BASE}/paper/{paper_id}",
+                params={"fields": S2_DETAIL_FIELDS},
+            )
+            resp.raise_for_status()
+            paper = resp.json()
+    except httpx.TimeoutException:
+        return f"Error: Semantic Scholar API request timed out for paper ID: {paper_id}"
+    except httpx.HTTPError as e:
+        return f"Error: Semantic Scholar API returned an error for paper '{paper_id}': {e}"
 
     authors = "\n  ".join(
         a.get("name", "Unknown") for a in (paper.get("authors") or [])

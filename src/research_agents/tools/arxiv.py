@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 
 import httpx
 
-ARXIV_API_BASE = "http://export.arxiv.org/api/query"
+ARXIV_API_BASE = "https://export.arxiv.org/api/query"
 ATOM_NS = "{http://www.w3.org/2005/Atom}"
 ARXIV_NS = "{http://arxiv.org/schemas/atom}"
 
@@ -94,11 +94,18 @@ async def search_arxiv(
         "sortOrder": "descending",
     }
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(ARXIV_API_BASE, params=params)
-        resp.raise_for_status()
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(ARXIV_API_BASE, params=params)
+            resp.raise_for_status()
+        root = ET.fromstring(resp.text)
+    except httpx.TimeoutException:
+        return f"Error: arXiv API request timed out for query: '{query}'"
+    except httpx.HTTPError as e:
+        return f"Error: arXiv API returned an error for query '{query}': {e}"
+    except ET.ParseError as e:
+        return f"Error: Failed to parse arXiv API response for query '{query}': {e}"
 
-    root = ET.fromstring(resp.text)
     entries = root.findall(f"{ATOM_NS}entry")
 
     results = []
@@ -145,11 +152,18 @@ async def fetch_arxiv_paper(arxiv_id: str) -> str:
     """
     params = {"id_list": arxiv_id}
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(ARXIV_API_BASE, params=params)
-        resp.raise_for_status()
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(ARXIV_API_BASE, params=params)
+            resp.raise_for_status()
+        root = ET.fromstring(resp.text)
+    except httpx.TimeoutException:
+        return f"Error: arXiv API request timed out for ID: {arxiv_id}"
+    except httpx.HTTPError as e:
+        return f"Error: arXiv API returned an error for ID '{arxiv_id}': {e}"
+    except ET.ParseError as e:
+        return f"Error: Failed to parse arXiv API response for ID '{arxiv_id}': {e}"
 
-    root = ET.fromstring(resp.text)
     entries = root.findall(f"{ATOM_NS}entry")
 
     if not entries:
