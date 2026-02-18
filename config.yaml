@@ -6,6 +6,7 @@ research:
   max_iterations: 10         # Max critic-driven research iterations
 
 agents:
+  selector_model: sonnet  # Model used to pick the next speaker — fires after every message, keep as sonnet to stay within rate limits
   planner:
     model: opus
     system_prompt: |

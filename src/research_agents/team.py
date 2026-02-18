@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from typing import Any
+
+from anthropic import RateLimitError
 
 from autogen_agentchat.agents import UserProxyAgent
 from autogen_agentchat.conditions import (
@@ -87,8 +90,9 @@ def _build_team(
     max_papers = config.research.max_papers_for_depth(depth)
     selector_prompt = _build_selector_prompt(depth, max_papers)
 
-    # Use the orchestrator model (Opus) for the selector
-    selector_model = get_model_client("opus", config, env)
+    # Use the configured selector model (default: sonnet) — fires after every
+    # agent turn, so a lightweight model is essential to stay within rate limits
+    selector_model = get_model_client(config.agents.selector_model, config, env)
 
     team = SelectorGroupChat(
         participants=all_agents,
@@ -192,6 +196,17 @@ async def run_research(
         # Final session save
         session_mgr.save_session(session)
 
+    except RateLimitError as e:
+        wait = 60
+        console.print(
+            f"\n[red]Rate limit reached.[/red] The Anthropic API has temporarily "
+            f"throttled requests.\n\n"
+            f"Your session has been saved. Wait about {wait} seconds, then resume with:\n\n"
+            f"  python -m research_agents research \"{session['query']}\" "
+            f"--session-id {session['id']}\n\n"
+            f"[dim]To reduce rate limit pressure, try --depth shallow or --depth medium.[/dim]"
+        )
+        session_mgr.save_session(session)
     except KeyboardInterrupt:
         console.print("\n[yellow]Research interrupted. Session saved.[/yellow]")
         session_mgr.save_session(session)

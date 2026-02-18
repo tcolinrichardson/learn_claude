@@ -37,6 +37,7 @@ class AgentConfig(BaseModel):
 class AgentsConfig(BaseModel):
     """All agent configurations."""
 
+    selector_model: str = "sonnet"  # Fires after every turn — keep lightweight
     planner: AgentConfig
     researchers: list[ResearcherConfig] = Field(default_factory=list)
     critic: AgentConfig
