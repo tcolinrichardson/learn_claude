@@ -150,9 +150,10 @@ $ cp .env.example .env
 ```
 ANTHROPIC_API_KEY=sk-ant-your-actual-key-here
 TAVILY_API_KEY=tvly-your-actual-key-here
+SEMANTIC_SCHOLAR_API_KEY=
 ```
 
-Save and close the file. If you don't have a Tavily key, just leave that line as-is or delete it — the system will still work without web search.
+Save and close the file. If you don't have a Tavily key, leave that line as-is or delete it — the system still works without web search. The Semantic Scholar key is optional too; without it the public rate limit (1 request/second) applies. A free key is available at [semanticscholar.org](https://www.semanticscholar.org/product/api).
 
 ---
 
@@ -272,8 +273,9 @@ pip install -e ".[dev]"
 # Set up API keys
 cp .env.example .env
 # Edit .env with your keys:
-#   ANTHROPIC_API_KEY=sk-ant-...
-#   TAVILY_API_KEY=tvly-...
+#   ANTHROPIC_API_KEY=sk-ant-...       (required)
+#   TAVILY_API_KEY=tvly-...            (optional — web search)
+#   SEMANTIC_SCHOLAR_API_KEY=...       (optional — raises S2 rate limit)
 ```
 
 ## Usage
@@ -434,7 +436,7 @@ Continue research? [y/n]:
 │       ├── semantic_scholar.py  # Semantic Scholar API
 │       ├── web_search.py        # Tavily web search
 │       └── pdf.py               # PDF download and text extraction
-├── tests/                       # 49 unit + integration tests
+├── tests/                       # 54 unit + integration tests
 ├── sessions/                    # Persisted session state (JSON)
 ├── output/                      # Generated reports (Markdown)
 └── data/                        # Downloaded PDFs
@@ -459,4 +461,5 @@ Tests use mocked HTTP responses and do not require API keys or network access.
 
 - Python 3.11+
 - `ANTHROPIC_API_KEY` — Required for all agents
-- `TAVILY_API_KEY` — Required for web search (optional, other tools still work)
+- `TAVILY_API_KEY` — Optional; enables web search via Tavily
+- `SEMANTIC_SCHOLAR_API_KEY` — Optional; raises the Semantic Scholar rate limit above the default 1 req/s. Free key at [semanticscholar.org](https://www.semanticscholar.org/product/api)

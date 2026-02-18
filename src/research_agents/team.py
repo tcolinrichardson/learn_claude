@@ -99,6 +99,8 @@ def _build_team(
     # Set env vars so tools can access API keys (only if non-empty)
     if env.tavily_api_key:
         os.environ["TAVILY_API_KEY"] = env.tavily_api_key
+    if env.semantic_scholar_api_key:
+        os.environ["SEMANTIC_SCHOLAR_API_KEY"] = env.semantic_scholar_api_key
 
     # Create all agents
     planner = create_planner_agent(config, env, depth)

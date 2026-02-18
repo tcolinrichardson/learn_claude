@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Semantic Scholar rate limiting** — module-level lock enforces ≤ 1 request/second to respect the public API limit; concurrent agent calls are serialised automatically
+- **429 exponential backoff** — `search_semantic_scholar` and `fetch_paper_details` now retry up to 3× on HTTP 429 responses (delays: 1 s → 2 s → 4 s) before returning an error string to the agent
+- **`SEMANTIC_SCHOLAR_API_KEY` support** — optional env var; when set, the key is sent as the `x-api-key` header, raising the server-side rate limit. Add to `.env` — free key at [semanticscholar.org](https://www.semanticscholar.org/product/api)
+- 5 new unit tests covering key header injection, rate-limiter throttle, 429 retry, and immediate failure on non-429 errors (54 tests total)
+
 - **Token budget** — configurable cumulative token limit with cost estimates. Set `token_budget.enabled: true` and `token_budget.threshold_tokens` in `config.yaml`; when the limit is reached the session is saved and the run pauses to ask `Continue? [y/n]`. Tokens accumulate across session resumes (lifetime per session).
 - Running token/cost footer (`↳ 45,230 tokens · ~$0.82 est.`) displayed below each agent panel when the budget is enabled. Counts all tokens including silent selector calls.
 - `tokens_used` and `cost_usd` fields in session JSON — persisted on every save so resuming a session carries the lifetime totals forward.

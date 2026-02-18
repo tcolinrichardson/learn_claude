@@ -108,6 +108,7 @@ class EnvSettings(BaseSettings):
 
     anthropic_api_key: str = ""
     tavily_api_key: str = ""
+    semantic_scholar_api_key: str = ""
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+import os
+import time
+
 import httpx
 
 S2_API_BASE = "https://api.semanticscholar.org/graph/v1"
@@ -15,6 +19,40 @@ S2_DETAIL_FIELDS = (
     "citations.title,citations.year,citations.authors,"
     "references.title,references.year,references.authors"
 )
+
+# Python ≥ 3.10: Lock() no longer requires a running event loop at construction time.
+_S2_LOCK = asyncio.Lock()
+_S2_LAST_REQUEST: float = 0.0
+_S2_MIN_INTERVAL: float = 1.0  # Semantic Scholar public limit: 1 req/s
+
+
+async def _s2_throttle() -> None:
+    """Sleep until at least 1 s has elapsed since the last S2 request."""
+    global _S2_LAST_REQUEST
+    async with _S2_LOCK:
+        elapsed = time.monotonic() - _S2_LAST_REQUEST
+        if elapsed < _S2_MIN_INTERVAL:
+            await asyncio.sleep(_S2_MIN_INTERVAL - elapsed)
+        _S2_LAST_REQUEST = time.monotonic()
+
+
+async def _s2_get(
+    client: httpx.AsyncClient,
+    url: str,
+    params: dict,
+    max_retries: int = 3,
+) -> httpx.Response:
+    """Rate-limited GET with exponential backoff on 429 responses."""
+    for attempt in range(max_retries + 1):
+        await _s2_throttle()
+        resp = await client.get(url, params=params)
+        if resp.status_code != 429 or attempt == max_retries:
+            resp.raise_for_status()
+            return resp
+        # Each retry also passes through _s2_throttle, so actual delay
+        # is backoff_sleep + remaining throttle interval (up to 1 s extra).
+        await asyncio.sleep(2**attempt)  # 1 s, 2 s, 4 s
+    raise RuntimeError("unreachable")  # pragma: no cover
 
 
 async def search_semantic_scholar(
@@ -42,10 +80,12 @@ async def search_semantic_scholar(
     if fields_of_study:
         params["fieldsOfStudy"] = fields_of_study
 
+    api_key = os.environ.get("SEMANTIC_SCHOLAR_API_KEY", "")
+    headers = {"x-api-key": api_key} if api_key else {}
+
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(f"{S2_API_BASE}/paper/search", params=params)
-            resp.raise_for_status()
+        async with httpx.AsyncClient(timeout=30, headers=headers) as client:
+            resp = await _s2_get(client, f"{S2_API_BASE}/paper/search", params)
             data = resp.json()
     except httpx.TimeoutException:
         return f"Error: Semantic Scholar API request timed out for query: '{query}'"
@@ -106,13 +146,16 @@ async def fetch_paper_details(paper_id: str) -> str:
     Returns:
         Formatted string with detailed paper metadata, citations, and references.
     """
+    api_key = os.environ.get("SEMANTIC_SCHOLAR_API_KEY", "")
+    headers = {"x-api-key": api_key} if api_key else {}
+
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(
+        async with httpx.AsyncClient(timeout=30, headers=headers) as client:
+            resp = await _s2_get(
+                client,
                 f"{S2_API_BASE}/paper/{paper_id}",
-                params={"fields": S2_DETAIL_FIELDS},
+                {"fields": S2_DETAIL_FIELDS},
             )
-            resp.raise_for_status()
             paper = resp.json()
     except httpx.TimeoutException:
         return f"Error: Semantic Scholar API request timed out for paper ID: {paper_id}"
