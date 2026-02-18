@@ -231,11 +231,22 @@ $ research-agents research "your original topic" --session-id 20240217_143022_a3
 
 ### Common problems
 
-**"command not found: research-agents"**
-Try using `python -m research_agents` instead:
+**"'research-agents' is not recognized" (Windows) or "command not found" (Mac/Linux)**
+The install succeeded but Windows doesn't know where to find the command. You have two options:
+
+*Option A — use the module form instead (works immediately, no changes needed):*
 ```
 $ python -m research_agents research "your topic"
 ```
+
+*Option B — fix it permanently so `research-agents` works as a command:*
+1. Open **Start**, search for **"Edit the system environment variables"**, click it
+2. Click **"Environment Variables..."**
+3. Under **User variables**, select **Path** and click **Edit**
+4. Click **New** and add:
+   `C:\Users\YourUsername\AppData\Local\Python\pythoncore-3.14-64\Scripts`
+   (replace `YourUsername` with your actual Windows username)
+5. Click OK on all windows, then **close and reopen your terminal**
 
 **"No module named research_agents"**
 You may not be in the right folder. Run `cd learn_claude` (or wherever you unzipped the project) and then re-run the install command from Step 4.
