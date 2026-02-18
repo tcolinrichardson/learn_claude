@@ -137,3 +137,14 @@ persistence:
   sessions_dir: sessions
   output_dir: output
   data_dir: data
+
+token_budget:
+  enabled: true
+  threshold_tokens: 100000   # Pause and ask to continue after this many cumulative tokens
+  pricing:
+    opus:
+      input_per_million: 15.00   # USD per 1M input tokens  (claude-opus-4-6)
+      output_per_million: 75.00  # USD per 1M output tokens (claude-opus-4-6)
+    sonnet:
+      input_per_million: 3.00    # USD per 1M input tokens  (claude-sonnet-4-5)
+      output_per_million: 15.00  # USD per 1M output tokens (claude-sonnet-4-5)

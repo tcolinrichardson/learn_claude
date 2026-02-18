@@ -7,7 +7,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-from research_agents.config import AppConfig, ResearchConfig, load_config
+from research_agents.config import (
+    AppConfig,
+    ModelPricing,
+    ResearchConfig,
+    TokenBudgetConfig,
+    load_config,
+)
 
 
 class TestResearchConfig:
@@ -68,3 +74,64 @@ class TestLoadConfig:
     def test_load_config_missing_file(self) -> None:
         with pytest.raises(FileNotFoundError):
             load_config("/nonexistent/config.yaml")
+
+
+class TestTokenBudgetConfig:
+    def test_defaults_disabled(self) -> None:
+        cfg = TokenBudgetConfig()
+        assert cfg.enabled is False
+        assert cfg.threshold_tokens == 100_000
+        assert cfg.pricing == {}
+
+    def test_enabled_with_pricing(self) -> None:
+        cfg = TokenBudgetConfig(
+            enabled=True,
+            threshold_tokens=50_000,
+            pricing={
+                "opus": ModelPricing(input_per_million=15.0, output_per_million=75.0),
+                "sonnet": ModelPricing(input_per_million=3.0, output_per_million=15.0),
+            },
+        )
+        assert cfg.enabled is True
+        assert cfg.threshold_tokens == 50_000
+        assert cfg.pricing["opus"].input_per_million == 15.0
+        assert cfg.pricing["sonnet"].output_per_million == 15.0
+
+    def test_appconfig_token_budget_defaults(self, tmp_path: Path) -> None:
+        """AppConfig without a token_budget block uses disabled defaults."""
+        config_data = {
+            "agents": {
+                "planner": {"model": "opus", "system_prompt": "Plan."},
+                "researchers": [],
+                "critic": {"model": "sonnet", "system_prompt": "Critique."},
+                "writer": {"model": "opus", "system_prompt": "Write."},
+            },
+        }
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text(yaml.dump(config_data))
+        cfg = load_config(config_path)
+        assert cfg.token_budget.enabled is False
+
+    def test_appconfig_token_budget_loaded(self, tmp_path: Path) -> None:
+        """token_budget block is parsed correctly from YAML."""
+        config_data = {
+            "agents": {
+                "planner": {"model": "opus", "system_prompt": "Plan."},
+                "researchers": [],
+                "critic": {"model": "sonnet", "system_prompt": "Critique."},
+                "writer": {"model": "opus", "system_prompt": "Write."},
+            },
+            "token_budget": {
+                "enabled": True,
+                "threshold_tokens": 75_000,
+                "pricing": {
+                    "opus": {"input_per_million": 15.0, "output_per_million": 75.0},
+                },
+            },
+        }
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text(yaml.dump(config_data))
+        cfg = load_config(config_path)
+        assert cfg.token_budget.enabled is True
+        assert cfg.token_budget.threshold_tokens == 75_000
+        assert cfg.token_budget.pricing["opus"].output_per_million == 75.0

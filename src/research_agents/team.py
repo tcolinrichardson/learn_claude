@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from typing import Any
 
 from anthropic import RateLimitError
@@ -49,6 +50,35 @@ def _build_selector_prompt(depth: str, max_papers: int) -> str:
         "- If a user (Human) message appears, prioritize addressing it\n"
         f"- Research depth: {depth} (target ~{max_papers} papers)\n"
     )
+
+
+def _build_source_model_map(config: AppConfig) -> dict[str, str]:
+    """Build a mapping from agent source name → model key.
+
+    AutoGen uses the sanitized agent name as the ``source`` field on every
+    streamed message.  We apply the same sanitization used in ``researcher.py``
+    so that researcher names match their message source strings exactly.
+
+    The result is used to look up per-model pricing when estimating cost.
+    Unknown sources (e.g. internal selector calls) should be looked up with
+    ``config.agents.selector_model`` as the fallback key.
+    """
+    mapping: dict[str, str] = {
+        "Planner": config.agents.planner.model,
+        "Critic": config.agents.critic.model,
+        "Writer": config.agents.writer.model,
+    }
+    for researcher in config.agents.researchers:
+        safe_name = re.sub(r"[^A-Za-z0-9_]", "_", researcher.name)
+        mapping[safe_name] = researcher.model
+    return mapping
+
+
+def _format_token_footer(tokens: int, cost_usd: float) -> str:
+    """Return a Rich-markup string for the dim status line shown after each panel."""
+    if cost_usd > 0:
+        return f"[dim]↳ {tokens:,} tokens · ~${cost_usd:.2f} est.[/dim]"
+    return f"[dim]↳ {tokens:,} tokens[/dim]"
 
 
 def _build_team(
@@ -125,6 +155,7 @@ async def run_research(
     depth = session.get("depth", config.research.default_depth)
     query = session["query"]
     session_mgr = SessionManager(config)
+    token_budget = config.token_budget
 
     team = _build_team(config, env, depth)
 
@@ -150,19 +181,45 @@ async def run_research(
 
     task = f"Research the following topic:\n\n{query}"
 
+    # --- Token budget initialisation ---
+    # Build source→model map once so we can look up pricing per message.
+    source_to_model = _build_source_model_map(config) if token_budget.enabled else {}
+    # Seed from session so resumed runs carry their lifetime total forward.
+    cumulative_tokens: int = session.get("tokens_used", 0)
+    cumulative_cost: float = session.get("cost_usd", 0.0)
+    # After the user chooses "y" to continue past the threshold we stop asking.
+    budget_exceeded = False
+
     # Run with streaming
     try:
         stream = team.run_stream(task=task)
         async for message in stream:
             # TaskResult is the final result object
             if hasattr(message, "messages"):
-                # This is the final TaskResult
                 break
 
             source = getattr(message, "source", "System")
             content = getattr(message, "content", str(message))
 
-            # Display the message
+            # --- Token accumulation (every message, including silent selector calls) ---
+            usage = getattr(message, "models_usage", None)
+            if token_budget.enabled and usage is not None:
+                prompt_t: int = getattr(usage, "prompt_tokens", 0)
+                completion_t: int = getattr(usage, "completion_tokens", 0)
+                cumulative_tokens += prompt_t + completion_t
+                session["tokens_used"] = cumulative_tokens
+
+                # Cost estimate: look up model key by source, fall back to selector model
+                model_key = source_to_model.get(source, config.agents.selector_model)
+                pricing = token_budget.pricing.get(model_key)
+                if pricing:
+                    cumulative_cost += (
+                        prompt_t / 1_000_000 * pricing.input_per_million
+                        + completion_t / 1_000_000 * pricing.output_per_million
+                    )
+                    session["cost_usd"] = cumulative_cost
+
+            # --- Display visible messages ---
             if isinstance(content, str) and content.strip():
                 style = _agent_style(source, config)
                 console.print(
@@ -172,6 +229,10 @@ async def run_research(
                         border_style=style,
                     )
                 )
+
+                # Running token/cost footer below every agent panel
+                if token_budget.enabled:
+                    console.print(_format_token_footer(cumulative_tokens, cumulative_cost))
 
                 # Record in session (truncated for storage)
                 session_mgr.add_message(session, source, content)
@@ -193,10 +254,45 @@ async def run_research(
                     session_mgr.mark_complete(session)
                     break
 
+                # --- Token budget threshold check ---
+                # Only fires once per run; after "y" the flag prevents further pauses.
+                if (
+                    token_budget.enabled
+                    and not budget_exceeded
+                    and cumulative_tokens >= token_budget.threshold_tokens
+                ):
+                    session_mgr.save_session(session)
+                    console.print(
+                        Panel(
+                            f"[yellow bold]Token budget reached:[/yellow bold] "
+                            f"{cumulative_tokens:,} tokens "
+                            f"(~${cumulative_cost:.2f} est.)\n\n"
+                            f"[dim]Your configured threshold is "
+                            f"{token_budget.threshold_tokens:,} tokens. "
+                            f"Session saved — you can resume later.[/dim]",
+                            title="Token Budget",
+                            border_style="yellow",
+                        )
+                    )
+                    loop = asyncio.get_running_loop()
+                    answer = await loop.run_in_executor(
+                        None, input, "Continue research? [y/n]: "
+                    )
+                    if answer.strip().lower() != "y":
+                        console.print(
+                            f"\n[yellow]Session paused at token budget.[/yellow] "
+                            f"Resume with:\n\n"
+                            f"  python -m research_agents research \"{query}\" "
+                            f"--session-id {session['id']}"
+                        )
+                        return
+                    # User chose to continue — suppress further threshold checks
+                    budget_exceeded = True
+
         # Final session save
         session_mgr.save_session(session)
 
-    except RateLimitError as e:
+    except RateLimitError:
         wait = 60
         console.print(
             f"\n[red]Rate limit reached.[/red] The Anthropic API has temporarily "

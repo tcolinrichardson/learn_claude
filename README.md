@@ -327,6 +327,7 @@ All settings live in `config.yaml`:
 - **`agents.researchers`** — Dynamic list of researcher agents (add, remove, or customize)
 - **`models`** — Claude model IDs, temperature, and token limits
 - **`persistence`** — Directories for sessions, reports, and downloaded PDFs
+- **`token_budget`** — Optional spending guard: pauses the run when cumulative tokens exceed a threshold
 
 ### Adding a Custom Researcher
 
@@ -348,6 +349,67 @@ agents:
 ```
 
 The system will automatically include the new agent in the research team.
+
+### Token Budget
+
+The token budget watches cumulative token usage across all agents (including the internal selector) and pauses the run when a threshold is reached, showing an estimated cost and asking whether to continue. Token counts carry over if you resume a saved session, so the budget is lifetime per session.
+
+**Enable / disable**
+
+```yaml
+token_budget:
+  enabled: true    # set to false to turn off entirely
+  threshold_tokens: 100000
+```
+
+**Change the threshold**
+
+`threshold_tokens` is the total number of tokens (input + output, all agents combined) before the run pauses. Lower it for tighter cost control; raise it to run longer without interruption.
+
+```yaml
+token_budget:
+  enabled: true
+  threshold_tokens: 50000   # pause earlier
+```
+
+**Update pricing**
+
+Pricing is used only to display an estimated cost alongside the token count — it does not affect billing. Values are in USD per million tokens and should match the model keys defined under `models:`.
+
+```yaml
+token_budget:
+  enabled: true
+  threshold_tokens: 100000
+  pricing:
+    opus:
+      input_per_million: 15.00    # claude-opus-4-6 input price
+      output_per_million: 75.00   # claude-opus-4-6 output price
+    sonnet:
+      input_per_million: 3.00     # claude-sonnet-4-5 input price
+      output_per_million: 15.00   # claude-sonnet-4-5 output price
+```
+
+If you add a custom model under `models:`, add a matching entry under `token_budget.pricing:` to get cost estimates for it. If no pricing entry exists for a model, tokens are still counted — the cost estimate just won't include those tokens.
+
+**What it looks like**
+
+After each agent message you'll see a dim status line:
+
+```
+↳ 45,230 tokens · ~$0.82 est.
+```
+
+When the threshold is crossed, the session is saved automatically and you're prompted:
+
+```
+Token Budget — Token budget reached: 102,450 tokens (~$3.14 est.)
+Your configured threshold is 100,000 tokens. Session saved — you can resume later.
+
+Continue research? [y/n]:
+```
+
+- Type `y` to continue (the prompt won't appear again for that run)
+- Type `n` to stop — a resume command is printed so you can pick up later
 
 ## Project Structure
 
@@ -372,7 +434,7 @@ The system will automatically include the new agent in the research team.
 │       ├── semantic_scholar.py  # Semantic Scholar API
 │       ├── web_search.py        # Tavily web search
 │       └── pdf.py               # PDF download and text extraction
-├── tests/                       # 35 unit + integration tests
+├── tests/                       # 49 unit + integration tests
 ├── sessions/                    # Persisted session state (JSON)
 ├── output/                      # Generated reports (Markdown)
 └── data/                        # Downloaded PDFs

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from research_agents.config import AppConfig
 from research_agents.session import SessionManager
 
@@ -88,3 +90,23 @@ class TestSessionManager:
     def test_list_sessions_empty(self, sample_config: AppConfig) -> None:
         mgr = SessionManager(sample_config)
         assert mgr.list_sessions() == []
+
+    def test_create_session_has_token_fields(self, sample_config: AppConfig) -> None:
+        """New sessions start with zero token/cost counters for budget tracking."""
+        mgr = SessionManager(sample_config)
+        session = mgr.create_session("token test", "shallow")
+        assert session["tokens_used"] == 0
+        assert session["cost_usd"] == 0.0
+
+    def test_token_fields_persist_across_save_load(self, sample_config: AppConfig) -> None:
+        """Token totals survive a save/load cycle (supports resume)."""
+        mgr = SessionManager(sample_config)
+        session = mgr.create_session("resume test", "medium")
+        session["tokens_used"] = 42_000
+        session["cost_usd"] = 1.23
+        mgr.save_session(session)
+
+        loaded = mgr.load_session(session["id"])
+        assert loaded is not None
+        assert loaded["tokens_used"] == 42_000
+        assert loaded["cost_usd"] == pytest.approx(1.23)

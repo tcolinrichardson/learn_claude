@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Token budget** — configurable cumulative token limit with cost estimates. Set `token_budget.enabled: true` and `token_budget.threshold_tokens` in `config.yaml`; when the limit is reached the session is saved and the run pauses to ask `Continue? [y/n]`. Tokens accumulate across session resumes (lifetime per session).
+- Running token/cost footer (`↳ 45,230 tokens · ~$0.82 est.`) displayed below each agent panel when the budget is enabled. Counts all tokens including silent selector calls.
+- `tokens_used` and `cost_usd` fields in session JSON — persisted on every save so resuming a session carries the lifetime totals forward.
+- Per-model pricing configurable under `token_budget.pricing` in `config.yaml` (defaults provided for `opus` and `sonnet`).
+- 14 new unit tests covering `TokenBudgetConfig`, `ModelPricing`, token persistence in sessions, `_build_source_model_map`, and `_format_token_footer` (49 tests total).
+
 ### Fixed
 
 - **Critical** — Report content was truncated to 2000 characters before being extracted and saved; reports are now extracted from the live message stream so full content is always preserved

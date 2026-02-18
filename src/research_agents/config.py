@@ -70,6 +70,29 @@ class PersistenceConfig(BaseModel):
     data_dir: str = "data"
 
 
+class ModelPricing(BaseModel):
+    """Token pricing for a single model, in USD per million tokens."""
+
+    input_per_million: float = 0.0
+    output_per_million: float = 0.0
+
+
+class TokenBudgetConfig(BaseModel):
+    """Configurable token budget that can pause a session when exceeded.
+
+    When ``enabled`` is True and the cumulative token count across all agents
+    (including the silent selector) reaches ``threshold_tokens``, the run
+    pauses and asks the user whether to continue.  Token counts survive
+    session resumes so the budget is lifetime per session.
+    """
+
+    enabled: bool = False
+    threshold_tokens: int = 100_000
+    # Pricing per model key (must match keys in the top-level ``models`` map).
+    # Used only to show an estimated cost alongside the token count.
+    pricing: dict[str, ModelPricing] = Field(default_factory=dict)
+
+
 class AppConfig(BaseModel):
     """Top-level application configuration."""
 
@@ -77,6 +100,7 @@ class AppConfig(BaseModel):
     agents: AgentsConfig
     models: dict[str, ModelConfig] = Field(default_factory=dict)
     persistence: PersistenceConfig = Field(default_factory=PersistenceConfig)
+    token_budget: TokenBudgetConfig = Field(default_factory=TokenBudgetConfig)
 
 
 class EnvSettings(BaseSettings):

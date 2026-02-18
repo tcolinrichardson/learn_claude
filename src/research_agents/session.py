@@ -43,6 +43,9 @@ class SessionManager:
             "notes": {},
             "messages": [],
             "iteration": 0,
+            # Token budget tracking — accumulated across resumes (lifetime per session).
+            "tokens_used": 0,
+            "cost_usd": 0.0,
         }
         self._save(session)
         return session
